@@ -7,11 +7,19 @@ import (
 
 func main() {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(".")))
 	corsMux := middlewareCors(mux)
+
+	mux.Handle("/app/*", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
+	mux.HandleFunc("/healthz", healthHandler)
 
 	fmt.Println("Starting server on 8080")
 	http.ListenAndServe(":8080", corsMux)
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "text/palin; charset=utf-8")
+	w.Write([]byte("OK"))
 }
 
 func middlewareCors(next http.Handler) http.Handler {
