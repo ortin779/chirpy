@@ -35,8 +35,8 @@ func main() {
 	corsMux := middlewareCors(mux)
 
 	mux.Handle("/app/*", apiCfg.middlewareMetricInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
-	mux.HandleFunc("/healthz", healthHandler)
-	mux.HandleFunc("/metrics", apiCfg.metricsHandler)
+	mux.HandleFunc("GET /healthz", healthHandler)
+	mux.HandleFunc("GET /metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("/reset", apiCfg.resetHandler)
 
 	fmt.Println("Starting server on 8080")
