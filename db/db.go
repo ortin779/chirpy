@@ -19,8 +19,8 @@ type Chirp struct {
 }
 
 type User struct {
-	Id    int `json:"id"`
-	Email int `json:"email"`
+	Id    int    `json:"id"`
+	Email string `json:"email"`
 }
 
 type DBStructure struct {
@@ -101,6 +101,31 @@ func (db *DB) GetChirp(id int) (Chirp, error) {
 	return chirp, nil
 }
 
+func (db *DB) CreateUser(email string) (User, error) {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	nextIndex := 1
+
+	if len(dbstruct.Users) > 0 {
+		keys := getSortedKeys(dbstruct.Users)
+		nextIndex = keys[0] + 1
+	}
+
+	newUser := User{
+		Id:    nextIndex,
+		Email: email,
+	}
+	dbstruct.Users[nextIndex] = newUser
+	err = db.writeDB(dbstruct)
+	if err != nil {
+		return User{}, err
+	}
+	return newUser, nil
+}
+
 func (db *DB) ensureDB() error {
 	_, err := os.OpenFile(db.path, os.O_RDONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -121,6 +146,7 @@ func (db *DB) loadDB() (DBStructure, error) {
 	if len(file) == 0 {
 		return DBStructure{
 			Chirps: make(map[int]Chirp),
+			Users:  make(map[int]User),
 		}, nil
 	}
 
