@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"slices"
-	"strings"
+	"strconv"
+
+	"github.com/ortin779/chirpy/db"
 )
 
 type chirpRequestBody struct {
@@ -17,7 +19,17 @@ var ProfaneWords = []string{
 	"fornax",
 }
 
-func ValidateChirp(w http.ResponseWriter, r *http.Request) {
+type ChirpHandler struct {
+	database *db.DB
+}
+
+func NewChirpHandler(db *db.DB) ChirpHandler {
+	return ChirpHandler{
+		database: db,
+	}
+}
+
+func (ch *ChirpHandler) HandleCreateChirp(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	decoder := json.NewDecoder(r.Body)
@@ -31,24 +43,47 @@ func ValidateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	strParts := strings.Split(requestBody.Body, " ")
-	for _, word := range ProfaneWords {
-		ind := slices.IndexFunc(strParts, func(v string) bool {
-			return strings.ToLower(v) == word
-		})
-		if ind != -1 {
-			strParts[ind] = "****"
-		}
-	}
-
-	cleanedString := strings.Join(strParts, " ")
-
 	if len(requestBody.Body) > 140 {
 		RespondWithError(w, 400, "Chirp is too long")
 		return
 	}
 
-	RespondWithJSON(w, http.StatusOK, struct {
-		CleanedBody string `json:"cleaned_body"`
-	}{CleanedBody: cleanedString})
+	chirp, err := ch.database.CreateChirp(requestBody.Body)
+	if err != nil {
+		RespondWithError(w, 500, err.Error())
+		return
+	}
+
+	RespondWithJSON(w, http.StatusCreated, chirp)
+}
+
+func (ch *ChirpHandler) HandleGetChirps(w http.ResponseWriter, r *http.Request) {
+
+	chirps, err := ch.database.GetChirps()
+	if err != nil {
+		RespondWithError(w, 500, err.Error())
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, chirps)
+}
+
+func (ch *ChirpHandler) HandleGetChirp(w http.ResponseWriter, r *http.Request) {
+	chirpId := r.PathValue("chirpId")
+	parsedId, err := strconv.Atoi(chirpId)
+	if err != nil {
+		RespondWithError(w, 400, err.Error())
+	}
+	chirp, err := ch.database.GetChirp(parsedId)
+	if err != nil {
+		if errors.Is(err, db.NotFoundError{}) {
+
+			RespondWithError(w, 404, err.Error())
+		} else {
+			RespondWithError(w, 500, err.Error())
+		}
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, chirp)
 }
