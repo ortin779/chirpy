@@ -6,6 +6,9 @@ import (
 	"os"
 	"slices"
 	"sync"
+
+	. "github.com/ortin779/chirpy/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type DB struct {
@@ -18,11 +21,6 @@ type Chirp struct {
 	Body string `json:"body"`
 }
 
-type User struct {
-	Id    int    `json:"id"`
-	Email string `json:"email"`
-}
-
 type DBStructure struct {
 	Chirps map[int]Chirp `json:"chirps"`
 	Users  map[int]User  `json:"users"`
@@ -32,6 +30,14 @@ type NotFoundError struct{}
 
 func (NotFoundError) Error() string {
 	return "not found"
+}
+
+type AuthError struct {
+	message string
+}
+
+func (aerr AuthError) Error() string {
+	return aerr.message
 }
 
 func NewDB(path string) (*DB, error) {
@@ -101,10 +107,15 @@ func (db *DB) GetChirp(id int) (Chirp, error) {
 	return chirp, nil
 }
 
-func (db *DB) CreateUser(email string) (User, error) {
+func (db *DB) CreateUser(userBody UserRequestBody) (UserResponse, error) {
 	dbstruct, err := db.loadDB()
 	if err != nil {
-		return User{}, err
+		return UserResponse{}, err
+	}
+
+	existingUsr := findUser(userBody.Email, dbstruct.Users)
+	if existingUsr != nil {
+		return UserResponse{}, fmt.Errorf("user already exist with given email")
 	}
 
 	nextIndex := 1
@@ -114,16 +125,45 @@ func (db *DB) CreateUser(email string) (User, error) {
 		nextIndex = keys[0] + 1
 	}
 
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userBody.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return UserResponse{}, err
+	}
 	newUser := User{
-		Id:    nextIndex,
-		Email: email,
+		Id:       nextIndex,
+		Email:    userBody.Email,
+		Password: string(hashedPassword),
 	}
 	dbstruct.Users[nextIndex] = newUser
 	err = db.writeDB(dbstruct)
 	if err != nil {
-		return User{}, err
+		return UserResponse{}, err
 	}
-	return newUser, nil
+	return UserResponse{
+		Id:    newUser.Id,
+		Email: newUser.Email,
+	}, nil
+}
+
+func (db *DB) LoginUser(userBody UserRequestBody) (UserResponse, error) {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return UserResponse{}, err
+	}
+
+	user := findUser(userBody.Email, dbstruct.Users)
+	if user == nil {
+		return UserResponse{}, AuthError{message: fmt.Sprintf("no user with given email %s", userBody.Email)}
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userBody.Password))
+	fmt.Println(err, userBody.Password)
+	if err != nil {
+		return UserResponse{}, AuthError{message: fmt.Sprintf("invalid password for user with email %s", userBody.Email)}
+	}
+	return UserResponse{
+		Id:    user.Id,
+		Email: user.Email,
+	}, nil
 }
 
 func (db *DB) ensureDB() error {
@@ -187,4 +227,13 @@ func getSortedKeys[T any](m map[int]T) []int {
 	}
 	slices.SortFunc(keys, func(i, j int) int { return j - i })
 	return keys
+}
+
+func findUser(email string, users map[int]User) *User {
+	for _, usr := range users {
+		if usr.Email == email {
+			return &usr
+		}
+	}
+	return nil
 }

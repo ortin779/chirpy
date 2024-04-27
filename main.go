@@ -21,6 +21,7 @@ func main() {
 
 	chirpHandler := api.NewChirpHandler(database)
 	userHandler := api.NewUserHandler(database)
+	authHandler := api.NewAuthHandler(database)
 
 	mux.Handle("/app/*", apiCfg.MiddlewareMetricInc(app.HandleFileServer()))
 	mux.HandleFunc("GET /api/healthz", api.HealthHandler)
@@ -30,6 +31,7 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", chirpHandler.HandleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpId}", chirpHandler.HandleGetChirp)
 	mux.HandleFunc("POST /api/users", userHandler.HandleCreateUser)
+	mux.HandleFunc("POST /api/login", authHandler.HandleLogin)
 
 	fmt.Println("Starting server on 8080")
 	http.ListenAndServe(":8080", corsMux)

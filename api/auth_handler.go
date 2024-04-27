@@ -2,23 +2,24 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/ortin779/chirpy/db"
 	"github.com/ortin779/chirpy/models"
 )
 
-type UserHandler struct {
+type AuthHandler struct {
 	database *db.DB
 }
 
-func NewUserHandler(db *db.DB) UserHandler {
-	return UserHandler{
+func NewAuthHandler(db *db.DB) AuthHandler {
+	return AuthHandler{
 		database: db,
 	}
 }
 
-func (h *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	decoder := json.NewDecoder(r.Body)
@@ -32,11 +33,16 @@ func (h *UserHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.database.CreateUser(requestBody)
+	user, err := h.database.LoginUser(requestBody)
 	if err != nil {
+		if errors.As(err, &db.AuthError{}) {
+			RespondWithError(w, 401, err.Error())
+			return
+		}
+
 		RespondWithError(w, 500, err.Error())
 		return
 	}
 
-	RespondWithJSON(w, http.StatusCreated, user)
+	RespondWithJSON(w, http.StatusOK, user)
 }
