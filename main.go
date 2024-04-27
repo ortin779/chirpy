@@ -32,11 +32,15 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", api.HealthHandler)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.MetricsHandler)
 	mux.HandleFunc("/api/reset", apiCfg.ResetHandler)
-	mux.HandleFunc("POST /api/chirps", chirpHandler.HandleCreateChirp)
+
+	mux.Handle("POST /api/chirps", api.AuthMiddleware(chirpHandler.HandleCreateChirp))
 	mux.HandleFunc("GET /api/chirps", chirpHandler.HandleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpId}", chirpHandler.HandleGetChirp)
+	mux.Handle("DELETE /api/chirps/{chirpId}", api.AuthMiddleware(chirpHandler.HandleDeleteChirp))
+
 	mux.HandleFunc("POST /api/users", userHandler.HandleCreateUser)
 	mux.Handle("PUT /api/users", api.AuthMiddleware(userHandler.HandleEditUser))
+
 	mux.HandleFunc("POST /api/login", authHandler.HandleLogin)
 	mux.HandleFunc("POST /api/refresh", authHandler.HandleRefresToken)
 	mux.HandleFunc("POST /api/revoke", authHandler.HandleRevokeToken)

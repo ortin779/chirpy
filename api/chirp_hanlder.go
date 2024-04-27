@@ -38,6 +38,8 @@ func (ch *ChirpHandler) HandleCreateChirp(w http.ResponseWriter, r *http.Request
 
 	err := decoder.Decode(&requestBody)
 
+	userId := r.Header.Get("User-Id")
+
 	if err != nil {
 		RespondWithError(w, 500, "Something went wrong")
 		return
@@ -48,7 +50,14 @@ func (ch *ChirpHandler) HandleCreateChirp(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	chirp, err := ch.database.CreateChirp(requestBody.Body)
+	id, err := strconv.Atoi(userId)
+
+	if err != nil {
+		RespondWithError(w, 400, "invalid user id")
+		return
+	}
+
+	chirp, err := ch.database.CreateChirp(requestBody.Body, id)
 	if err != nil {
 		RespondWithError(w, 500, err.Error())
 		return
@@ -58,7 +67,6 @@ func (ch *ChirpHandler) HandleCreateChirp(w http.ResponseWriter, r *http.Request
 }
 
 func (ch *ChirpHandler) HandleGetChirps(w http.ResponseWriter, r *http.Request) {
-
 	chirps, err := ch.database.GetChirps()
 	if err != nil {
 		RespondWithError(w, 500, err.Error())
@@ -86,4 +94,34 @@ func (ch *ChirpHandler) HandleGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondWithJSON(w, http.StatusOK, chirp)
+}
+
+func (ch *ChirpHandler) HandleDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	chirpId := r.PathValue("chirpId")
+	parsedId, err := strconv.Atoi(chirpId)
+	if err != nil {
+		RespondWithError(w, 400, err.Error())
+	}
+
+	userId := r.Header.Get("User-Id")
+	id, err := strconv.Atoi(userId)
+	if err != nil {
+		RespondWithError(w, 400, "invalid user id")
+		return
+	}
+
+	_, err = ch.database.DeleteChirp(parsedId, id)
+
+	if err != nil {
+		if errors.Is(err, db.NotFoundError{}) {
+			RespondWithError(w, 404, err.Error())
+		} else if errors.As(err, &db.AuthorizationError{}) {
+			RespondWithError(w, 403, err.Error())
+		} else {
+			RespondWithError(w, 500, err.Error())
+		}
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, struct{}{})
 }

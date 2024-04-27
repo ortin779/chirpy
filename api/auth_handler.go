@@ -35,7 +35,7 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.database.LoginUser(requestBody)
 	if err != nil {
-		if errors.As(err, &db.AuthError{}) {
+		if errors.As(err, &db.AuthenticationError{}) {
 			RespondWithError(w, 401, err.Error())
 			return
 		}
@@ -57,7 +57,7 @@ func (h *AuthHandler) HandleRefresToken(w http.ResponseWriter, r *http.Request) 
 
 	resp, err := h.database.RefreshToken(token)
 	if err != nil {
-		if errors.As(err, &db.AuthError{}) {
+		if errors.As(err, &db.AuthenticationError{}) {
 			RespondWithError(w, 401, err.Error())
 			return
 		}
@@ -79,7 +79,7 @@ func (h *AuthHandler) HandleRevokeToken(w http.ResponseWriter, r *http.Request) 
 
 	err := h.database.RevokeToken(token)
 	if err != nil {
-		if errors.As(err, &db.AuthError{}) {
+		if errors.As(err, &db.AuthenticationError{}) {
 			RespondWithError(w, 401, err.Error())
 			return
 		}
