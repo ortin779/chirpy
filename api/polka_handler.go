@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/ortin779/chirpy/db"
 	"github.com/ortin779/chirpy/models"
@@ -35,6 +37,15 @@ func (ph PolkaHandler) HandlePolkaWebhook(w http.ResponseWriter, r *http.Request
 
 	if polkaBody.Event != "user.upgraded" {
 		RespondWithJSON(w, 200, struct{}{})
+		return
+	}
+
+	apiKey := r.Header.Get("Authorization")
+
+	parts := strings.Split(apiKey, " ")
+
+	if len(parts) < 2 || parts[1] != os.Getenv("POLKA_API_KEY") {
+		RespondWithError(w, 401, "invalid api key")
 		return
 	}
 
