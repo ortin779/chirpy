@@ -4,24 +4,13 @@ import (
 	"errors"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	. "github.com/ortin779/chirpy/models"
 )
 
-func CreateToken(userBody UserRequestBody, sub string) (string, error) {
+func CreateToken(claims *jwt.RegisteredClaims) (string, error) {
 	jwtSecret := os.Getenv("JWT_SECRET")
-	expiryTime := 50_400
-	if userBody.ExpiresInSec != 0 && userBody.ExpiresInSec <= expiryTime {
-		expiryTime = userBody.ExpiresInSec
-	}
-	claims := &jwt.RegisteredClaims{
-		IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Second * time.Duration(expiryTime)).UTC()),
-		Issuer:    "chirpy",
-		Subject:   sub,
-	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	return token.SignedString([]byte(jwtSecret))

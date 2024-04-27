@@ -38,6 +38,8 @@ func main() {
 	mux.HandleFunc("POST /api/users", userHandler.HandleCreateUser)
 	mux.Handle("PUT /api/users", api.AuthMiddleware(userHandler.HandleEditUser))
 	mux.HandleFunc("POST /api/login", authHandler.HandleLogin)
+	mux.HandleFunc("POST /api/refresh", authHandler.HandleRefresToken)
+	mux.HandleFunc("POST /api/revoke", authHandler.HandleRevokeToken)
 
 	fmt.Println("Starting server on 8080")
 	http.ListenAndServe(":8080", corsMux)

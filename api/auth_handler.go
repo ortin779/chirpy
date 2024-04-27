@@ -46,3 +46,47 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	RespondWithJSON(w, http.StatusOK, user)
 }
+
+func (h *AuthHandler) HandleRefresToken(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+
+	if len(token) == 0 {
+		RespondWithError(w, 401, "invalid refresh token")
+		return
+	}
+
+	resp, err := h.database.RefreshToken(token)
+	if err != nil {
+		if errors.As(err, &db.AuthError{}) {
+			RespondWithError(w, 401, err.Error())
+			return
+		}
+
+		RespondWithError(w, 500, err.Error())
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, resp)
+}
+
+func (h *AuthHandler) HandleRevokeToken(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+
+	if len(token) == 0 {
+		RespondWithError(w, 401, "invalid refresh token")
+		return
+	}
+
+	err := h.database.RevokeToken(token)
+	if err != nil {
+		if errors.As(err, &db.AuthError{}) {
+			RespondWithError(w, 401, err.Error())
+			return
+		}
+
+		RespondWithError(w, 500, err.Error())
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, struct{}{})
+}

@@ -8,10 +8,17 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ortin779/chirpy/helpers"
 	. "github.com/ortin779/chirpy/models"
 	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	accessTokenExpiry  = time.Second * time.Duration(3_600)
+	refreshTokenExpiry = time.Hour * 24 * 6
 )
 
 type DB struct {
@@ -25,8 +32,9 @@ type Chirp struct {
 }
 
 type DBStructure struct {
-	Chirps map[int]Chirp `json:"chirps"`
-	Users  map[int]User  `json:"users"`
+	Chirps       map[int]Chirp           `json:"chirps"`
+	Users        map[int]User            `json:"users"`
+	RefreshToken map[string]RefreshToken `json:"revoked_tokens"`
 }
 
 type NotFoundError struct{}
@@ -197,16 +205,132 @@ func (db *DB) LoginUser(userBody UserRequestBody) (UserLoginResponse, error) {
 		return UserLoginResponse{}, AuthError{message: fmt.Sprintf("invalid password for user with email %s", userBody.Email)}
 	}
 
-	signedToken, err := helpers.CreateToken(userBody, strconv.Itoa(user.Id))
+	accessTokenClaims := &jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenExpiry)),
+		Issuer:    "chirpy-access",
+		Subject:   strconv.Itoa(user.Id),
+	}
+
+	refreshTokenClaims := &jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshTokenExpiry)),
+		Issuer:    "chirpy-refresh",
+		Subject:   strconv.Itoa(user.Id),
+	}
+
+	accessToken, err := helpers.CreateToken(accessTokenClaims)
 	if err != nil {
-		fmt.Println(err)
 		return UserLoginResponse{}, errors.New("error while signing the token")
 	}
+	refreshToken, err := helpers.CreateToken(refreshTokenClaims)
+	if err != nil {
+		return UserLoginResponse{}, errors.New("error while signing the token")
+	}
+	dbstruct.RefreshToken[refreshToken] = RefreshToken{
+		Id:         refreshToken,
+		HasRevoked: false,
+	}
+	err = db.writeDB(dbstruct)
+	if err != nil {
+		return UserLoginResponse{}, err
+	}
 	return UserLoginResponse{
-		Id:    user.Id,
-		Email: user.Email,
-		Token: signedToken,
+		Id:           user.Id,
+		Email:        user.Email,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
 	}, nil
+}
+
+func (db *DB) RefreshToken(token string) (RefreshTokenResponse, error) {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return RefreshTokenResponse{}, err
+	}
+
+	parsedToken, err := helpers.ValidateToken(token)
+
+	if err != nil {
+		return RefreshTokenResponse{}, AuthError{message: err.Error()}
+	}
+	if !parsedToken.Valid {
+		return RefreshTokenResponse{}, AuthError{message: "invalid refresh token"}
+	}
+	issuer, err := parsedToken.Claims.GetIssuer()
+	if err != nil {
+		return RefreshTokenResponse{}, err
+	}
+	if issuer != "chirpy-refresh" {
+		return RefreshTokenResponse{}, AuthError{message: "invalid refresh token issuer"}
+	}
+	userId, err := parsedToken.Claims.GetSubject()
+	if err != nil {
+		return RefreshTokenResponse{}, errors.New("invalid refresh token claims")
+	}
+
+	rToken, ok := dbstruct.RefreshToken[parsedToken.Raw]
+	if !ok {
+		return RefreshTokenResponse{}, AuthError{message: "invalid refresh token"}
+	}
+
+	if rToken.HasRevoked {
+		return RefreshTokenResponse{}, AuthError{message: "refresh token revoked"}
+	}
+
+	accessTokenClaims := &jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(accessTokenExpiry)),
+		Issuer:    "chirpy-access",
+		Subject:   userId,
+	}
+
+	accessToken, err := helpers.CreateToken(accessTokenClaims)
+	if err != nil {
+		return RefreshTokenResponse{}, errors.New("error while signing the token")
+	}
+	return RefreshTokenResponse{Token: accessToken}, nil
+}
+
+func (db *DB) RevokeToken(token string) error {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	parsedToken, err := helpers.ValidateToken(token)
+
+	if err != nil {
+		return AuthError{message: err.Error()}
+	}
+	if !parsedToken.Valid {
+		return AuthError{message: "invalid refresh token"}
+	}
+	issuer, err := parsedToken.Claims.GetIssuer()
+	if err != nil {
+		return err
+	}
+	if issuer != "chirpy-refresh" {
+		return AuthError{message: "invalid refresh token issuer"}
+	}
+
+	rToken, ok := dbstruct.RefreshToken[parsedToken.Raw]
+	if !ok {
+		return AuthError{message: "invalid refresh token"}
+	}
+
+	if rToken.HasRevoked {
+		fmt.Println("Revoked state")
+		return AuthError{message: "token has been revoked"}
+	}
+
+	dbstruct.RefreshToken[parsedToken.Raw] = RefreshToken{
+		Id:         rToken.Id,
+		HasRevoked: true,
+	}
+
+	return db.writeDB(dbstruct)
+
 }
 
 func (db *DB) ensureDB() error {
@@ -228,8 +352,9 @@ func (db *DB) loadDB() (DBStructure, error) {
 
 	if len(file) == 0 {
 		return DBStructure{
-			Chirps: make(map[int]Chirp),
-			Users:  make(map[int]User),
+			Chirps:       make(map[int]Chirp),
+			Users:        make(map[int]User),
+			RefreshToken: make(map[string]RefreshToken),
 		}, nil
 	}
 
