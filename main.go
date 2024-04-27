@@ -5,12 +5,17 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/joho/godotenv"
 	"github.com/ortin779/chirpy/api"
 	"github.com/ortin779/chirpy/app"
 	"github.com/ortin779/chirpy/db"
 )
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalln("error while loading env variables")
+	}
 	apiCfg := app.ApiConfig{}
 	mux := http.NewServeMux()
 	corsMux := api.MiddlewareCors(mux)
@@ -31,6 +36,7 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", chirpHandler.HandleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpId}", chirpHandler.HandleGetChirp)
 	mux.HandleFunc("POST /api/users", userHandler.HandleCreateUser)
+	mux.Handle("PUT /api/users", api.AuthMiddleware(userHandler.HandleEditUser))
 	mux.HandleFunc("POST /api/login", authHandler.HandleLogin)
 
 	fmt.Println("Starting server on 8080")

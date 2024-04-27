@@ -2,11 +2,14 @@ package db
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"sync"
 
+	"github.com/ortin779/chirpy/helpers"
 	. "github.com/ortin779/chirpy/models"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -65,8 +68,6 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 		keys := getSortedKeys(dbstruct.Chirps)
 		nextIndex = keys[0] + 1
 	}
-
-	fmt.Println("Calling create chirp")
 
 	newChirp := Chirp{
 		Id:   nextIndex,
@@ -145,24 +146,66 @@ func (db *DB) CreateUser(userBody UserRequestBody) (UserResponse, error) {
 	}, nil
 }
 
-func (db *DB) LoginUser(userBody UserRequestBody) (UserResponse, error) {
+func (db *DB) UpdateUser(userBody UserRequestBody, userId string) (UserResponse, error) {
 	dbstruct, err := db.loadDB()
 	if err != nil {
 		return UserResponse{}, err
 	}
 
-	user := findUser(userBody.Email, dbstruct.Users)
-	if user == nil {
-		return UserResponse{}, AuthError{message: fmt.Sprintf("no user with given email %s", userBody.Email)}
-	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userBody.Password))
-	fmt.Println(err, userBody.Password)
+	parsedId, err := strconv.Atoi(userId)
 	if err != nil {
-		return UserResponse{}, AuthError{message: fmt.Sprintf("invalid password for user with email %s", userBody.Email)}
+		return UserResponse{}, fmt.Errorf("invalid user id")
+	}
+
+	existingUsr, ok := dbstruct.Users[parsedId]
+	if !ok {
+		return UserResponse{}, fmt.Errorf("user already exist with given email")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userBody.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return UserResponse{}, err
+	}
+	updatedUser := User{
+		Id:       existingUsr.Id,
+		Email:    userBody.Email,
+		Password: string(hashedPassword),
+	}
+	dbstruct.Users[parsedId] = updatedUser
+	err = db.writeDB(dbstruct)
+	if err != nil {
+		return UserResponse{}, err
 	}
 	return UserResponse{
+		Id:    updatedUser.Id,
+		Email: updatedUser.Email,
+	}, nil
+}
+
+func (db *DB) LoginUser(userBody UserRequestBody) (UserLoginResponse, error) {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return UserLoginResponse{}, err
+	}
+
+	user := findUser(userBody.Email, dbstruct.Users)
+	if user == nil {
+		return UserLoginResponse{}, AuthError{message: fmt.Sprintf("no user with given email %s", userBody.Email)}
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(userBody.Password))
+	if err != nil {
+		return UserLoginResponse{}, AuthError{message: fmt.Sprintf("invalid password for user with email %s", userBody.Email)}
+	}
+
+	signedToken, err := helpers.CreateToken(userBody, strconv.Itoa(user.Id))
+	if err != nil {
+		fmt.Println(err)
+		return UserLoginResponse{}, errors.New("error while signing the token")
+	}
+	return UserLoginResponse{
 		Id:    user.Id,
 		Email: user.Email,
+		Token: signedToken,
 	}, nil
 }
 
@@ -193,7 +236,6 @@ func (db *DB) loadDB() (DBStructure, error) {
 	dbStructure := DBStructure{}
 	err = json.Unmarshal(file, &dbStructure)
 	if err != nil {
-		fmt.Println(err)
 		return DBStructure{}, err
 	}
 	return dbStructure, nil
@@ -205,14 +247,12 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 
 	data, err := json.Marshal(dbStructure)
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 
 	err = os.WriteFile(db.path, data, 0644)
 
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 
