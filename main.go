@@ -27,6 +27,7 @@ func main() {
 	chirpHandler := api.NewChirpHandler(database)
 	userHandler := api.NewUserHandler(database)
 	authHandler := api.NewAuthHandler(database)
+	polkaHanler := api.NewPolksHandler(database)
 
 	mux.Handle("/app/*", apiCfg.MiddlewareMetricInc(app.HandleFileServer()))
 	mux.HandleFunc("GET /api/healthz", api.HealthHandler)
@@ -44,6 +45,8 @@ func main() {
 	mux.HandleFunc("POST /api/login", authHandler.HandleLogin)
 	mux.HandleFunc("POST /api/refresh", authHandler.HandleRefresToken)
 	mux.HandleFunc("POST /api/revoke", authHandler.HandleRevokeToken)
+
+	mux.HandleFunc("POST /api/polka/webhooks", polkaHanler.HandlePolkaWebhook)
 
 	fmt.Println("Starting server on 8080")
 	http.ListenAndServe(":8080", corsMux)

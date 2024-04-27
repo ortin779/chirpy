@@ -63,7 +63,7 @@ func (db *DB) UpdateUser(userBody models.UserRequestBody, userId string) (models
 
 	existingUsr, ok := dbstruct.Users[parsedId]
 	if !ok {
-		return models.UserResponse{}, fmt.Errorf("user already exist with given email")
+		return models.UserResponse{}, NotFoundError{}
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(userBody.Password), bcrypt.DefaultCost)
@@ -136,5 +136,33 @@ func (db *DB) LoginUser(userBody models.UserRequestBody) (models.UserLoginRespon
 		Email:        user.Email,
 		Token:        accessToken,
 		RefreshToken: refreshToken,
+		IsChirpyRed:  user.IsChirpyRed,
 	}, nil
+}
+
+func (db *DB) MarkUserAsRedChirp(userId int) error {
+	dbstruct, err := db.loadDB()
+	if err != nil {
+		return err
+	}
+
+	existingUsr, ok := dbstruct.Users[userId]
+	if !ok {
+		return NotFoundError{}
+	}
+
+	updatedUser := models.User{
+		Id:          existingUsr.Id,
+		Email:       existingUsr.Email,
+		Password:    existingUsr.Password,
+		IsChirpyRed: true,
+	}
+
+	dbstruct.Users[userId] = updatedUser
+
+	err = db.writeDB(dbstruct)
+	if err != nil {
+		return err
+	}
+	return nil
 }
