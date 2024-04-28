@@ -1,6 +1,11 @@
 package db
 
-import . "github.com/ortin779/chirpy/models"
+import (
+	"slices"
+	"strconv"
+
+	. "github.com/ortin779/chirpy/models"
+)
 
 func (db *DB) CreateChirp(body string, authorId int) (Chirp, error) {
 	dbstruct, err := db.loadDB()
@@ -28,18 +33,42 @@ func (db *DB) CreateChirp(body string, authorId int) (Chirp, error) {
 	return newChirp, nil
 }
 
-func (db *DB) GetChirps() ([]Chirp, error) {
+func (db *DB) GetChirps(authorId string, sort string) ([]Chirp, error) {
 	dbstruct, err := db.loadDB()
 	if err != nil {
 		return []Chirp{}, err
 	}
 
 	keys := getSortedKeys(dbstruct.Chirps)
-	chirps := make([]Chirp, len(keys))
-	for idx, key := range keys {
-		chirps[idx] = dbstruct.Chirps[key]
+	chirps := make([]Chirp, 0, len(keys))
+
+	if authorId == "" {
+		for _, key := range keys {
+			chirps = append(chirps, dbstruct.Chirps[key])
+		}
+	} else {
+		parsedId, err := strconv.Atoi(authorId)
+		if err != nil {
+			return []Chirp{}, err
+		}
+		for _, v := range keys {
+			chirp := dbstruct.Chirps[v]
+			if chirp.AuthorId == parsedId {
+				chirps = append(chirps, chirp)
+			}
+		}
 	}
+
+	slices.SortFunc(chirps, func(a, b Chirp) int {
+		if sort == "asc" {
+			return a.Id - b.Id
+		} else {
+			return b.Id - a.Id
+		}
+	})
+
 	return chirps, nil
+
 }
 
 func (db *DB) GetChirp(id int) (Chirp, error) {

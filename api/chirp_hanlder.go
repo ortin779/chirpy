@@ -67,7 +67,15 @@ func (ch *ChirpHandler) HandleCreateChirp(w http.ResponseWriter, r *http.Request
 }
 
 func (ch *ChirpHandler) HandleGetChirps(w http.ResponseWriter, r *http.Request) {
-	chirps, err := ch.database.GetChirps()
+	authorId := r.URL.Query().Get("author_id")
+	sortOrder := r.URL.Query().Get("sort")
+
+	if sortOrder == "" {
+		sortOrder = "asc"
+	}
+
+	chirps, err := ch.database.GetChirps(authorId, sortOrder)
+
 	if err != nil {
 		RespondWithError(w, 500, err.Error())
 		return
